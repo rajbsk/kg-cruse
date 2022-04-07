@@ -153,7 +153,7 @@ class Seq2SeqModel(nn.Module):
         return loss.item()
             
     def train_model(self, trainDataLoader, devDataLoader):
-        logger = Logger("logs/")
+        # logger = Logger("logs/")
         for epoch in range(self.epochs):
             self.train()
             train_loss = 0
@@ -175,7 +175,7 @@ class Seq2SeqModel(nn.Module):
             print("Epoch = %d, Train Loss = %f, Dev Loss = %f"%(epoch+1, train_loss, dev_loss))
             if (epoch+1)%5==0:
                 torch.save(self.state_dict(), self.model_directory+self.model_name+"_"+str(epoch+1))
-            logger.scalar_summary("Train Loss", train_loss, epoch+1)
-            logger.scalar_summary("Dev Loss", dev_loss, epoch+1)
+            # logger.scalar_summary("Train Loss", train_loss, epoch+1)
+            # logger.scalar_summary("Dev Loss", dev_loss, epoch+1)
 
 
