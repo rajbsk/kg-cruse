@@ -2,9 +2,11 @@ from __future__ import absolute_import, division, print_function
 
 import sys
 import os
-# gpu_id = "4"
-# split = "1"
-# os.environ["CUDA_VISIBLE_DEVICES"] = "4"
+# gpu_id = "0"
+# split_id = "1"
+gpu_id = "1"
+split_id = sys.argv[1]
+os.environ["CUDA_VISIBLE_DEVICES"] = gpu_id
 os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
 from math import log
 from datetime import datetime
@@ -29,8 +31,7 @@ import threading
 from functools import reduce
 
 from dataset import DialKGDataset, ToTensor, dialkg_collate
-from DialKGWalker_build import KGPathWalkerModel
-import argparse
+from seq2seq_build import Seq2SeqModel
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = "cpu"
@@ -116,91 +117,88 @@ def calculate_metrics(paths, probs, true_path):
         #     entity_paths.append(entity_path)
         # test = 1
 
-def get_ent_scores(h_t, r_t, n_ent_emb, n_rel_emb):
+def get_ent_scores(h_t, n_ent_emb, n_rel_emb):
     lhs = (h_t*n_ent_emb)
     lhs = torch.sum(lhs, dim=-1)
-    rhs = (r_t*n_rel_emb)
-    rhs = torch.sum(rhs, dim=-1)
 
-    scores = (lhs + rhs)
-    scores =  F.softmax(scores)
+    scores = (lhs)
     return scores
 
 def batch_beam_search(model, batch, device, topk, opt, graph):
-    dialogue_padded, current, dialogue_len, current_len, dialogue_mask, current_mask, entity_paths, relation_paths, seed_entities, true_entities, start_entities = model.get_batch_data(batch)
-    current_batch_size = len(current_len)
-    dialogue_embed = [model.word_embeddings(dialogue) for dialogue in dialogue_padded]
-    current = model.word_embeddings(current)
+    with torch.no_grad():
+        dialogue_padded, current, dialogue_len, current_len, dialogue_mask, current_mask, entity_paths, relation_paths, seed_entities, true_entities, start_entities = model.get_batch_data(batch)
+        current_batch_size = len(current_len)
+        dialogue_embed = [model.word_embeddings(dialogue) for dialogue in dialogue_padded]
+        current = model.word_embeddings(current)
 
-    dialogue_packed = []
-    for i in range(len(dialogue_embed)):
-        d_packed = pack_padded_sequence(dialogue_embed[i], dialogue_len[i], batch_first=True, enforce_sorted=False)
-        dialogue_packed.append(d_packed)
-    current = pack_padded_sequence(current, current_len, batch_first=True, enforce_sorted=False)
+        dialogue_packed = []
+        for i in range(len(dialogue_embed)):
+            d_packed = pack_padded_sequence(dialogue_embed[i], dialogue_len[i], batch_first=True, enforce_sorted=False)
+            dialogue_packed.append(d_packed)
+        current = pack_padded_sequence(current, current_len, batch_first=True, enforce_sorted=False)
 
-    current = model.utterance_encoder(current, current_mask)
-    dialogue = model.dialogue_encoder(dialogue_packed, dialogue_mask)
-    entity_embeddings = model.entity_embeddings(seed_entities)
+        current = model.utterance_encoder(current, current_mask)
+        dialogue = model.dialogue_encoder(dialogue_packed, dialogue_mask)
+        entity_embeddings = model.entity_embeddings(seed_entities)
 
-    x_bar = model.modality_attention(entity_embeddings, current, dialogue)
+        start_entities = start_entities[0]
+        start_entities = [[ent] for ent in start_entities]
+        path_pool = start_entities[:]
+        probs_pool = [[1] for _ in range(len(start_entities))]
+        
+        for i in range(model.n_hops-1):
+            new_paths_pool, new_probs_pool = [], []
+            for j in range(len(path_pool)):
+                path = path_pool[j]
+                source = path[-1]
+                source_ent = torch.tensor([path[0]], dtype=torch.int64).to(device)
+                source_ent_emb = model.entity_embeddings(source_ent)
+                x_bar = model.modality_attention(source_ent_emb, current, dialogue)
+                x_bar = x_bar.unsqueeze(1)
+                h_t = x_bar
+                c_t = x_bar
 
-    h_t = torch.zeros(current_batch_size, model.hidden_dim).to(device)
-    c_t = torch.zeros(current_batch_size, model.hidden_dim).to(device)
-    start_entities = start_entities[0]
-    start_entities = [[ent] for ent in start_entities]
-    path_pool = start_entities[:]
-    probs_pool = [[1] for _ in range(len(start_entities))]
-    hops = model.n_hops-1
-    for i in range(hops):
-        new_paths_pool, new_probs_pool = [], []
-        for j in range(len(path_pool)):
-            path = path_pool[j]
-            source = path[-1]
-            source_ent = torch.tensor([path[0]], dtype=torch.int64).to(device)
-            source_ent_emb = model.entity_embeddings(source_ent)
-            x_bar = model.modality_attention(source_ent_emb, current, dialogue)
-            # x_bar = x_bar.unsqueeze(1)
-            h_t = torch.zeros(current_batch_size, model.hidden_dim).to(device)
-            c_t = torch.zeros(current_batch_size, model.hidden_dim).to(device)
+                path = torch.tensor(path, dtype=torch.int64).unsqueeze(0).to(device)
+                path_emb = model.entity_embeddings(path)
 
-            source = path_pool[j][-1]
-            current_path = path_pool[j]
-            current_prob = probs_pool[j]
-            for _ in range(len(path)):
-                h_t, c_t, r_t = model.walker(x_bar, model.relation_embeddings.weight, h_t, c_t)
+                x_bar, _, _ = model.walker(path_emb, h_t, c_t)
+                current_path = path_pool[j]
+                current_prob = probs_pool[j]
+                # inp = model.entity_embeddings(source)
+                # inp = 
+                x_bar = x_bar[0][-1].unsqueeze(0)
+                neighbor_relations, neighbor_entities = get_neighbors(graph, source)
+                neighbor_relations = neighbor_relations.to(device)
+                neighbor_entities = neighbor_entities.to(device)
+                n_rel_emb = model.relation_embeddings(neighbor_relations)
+                n_ent_emb = model.entity_embeddings(neighbor_entities)
+                ent_scores = get_ent_scores(x_bar, n_ent_emb, n_rel_emb)
+                tk = min(len(n_ent_emb), topk[i])
+                top_ent_scores, top_ent_idxs = torch.topk(ent_scores, k=tk)
+                top_entities = neighbor_entities[top_ent_idxs].tolist()
+                top_ent_scores = top_ent_scores.tolist()
+                for k in range(tk):
+                    new_paths_pool.append(current_path[:]+[top_entities[k]])
+                    new_probs_pool.append(current_prob[:]+[top_ent_scores[k]])
+            path_pool = new_paths_pool[:]
+            probs_pool = new_probs_pool[:]
 
-            neighbor_relations, neighbor_entities = get_neighbors(graph, source)
-            neighbor_relations = neighbor_relations.to(device)
-            neighbor_entities = neighbor_entities.to(device)
-            n_rel_emb = model.relation_embeddings(neighbor_relations)
-            n_ent_emb = model.entity_embeddings(neighbor_entities)
-            ent_scores = get_ent_scores(h_t, r_t, n_ent_emb, n_rel_emb)
-            tk = min(len(n_ent_emb), topk[i])
-            top_ent_scores, top_ent_idxs = torch.topk(ent_scores, k=tk)
-            top_entities = neighbor_entities[top_ent_idxs].tolist()
-            top_ent_scores = top_ent_scores.tolist()
-            for k in range(tk):
-                new_paths_pool.append(current_path[:]+[top_entities[k]])
-                new_probs_pool.append(current_prob[:]+[top_ent_scores[k]])
-        path_pool = new_paths_pool[:]
-        probs_pool = new_probs_pool[:]
-
-    probs_pool = [reduce(lambda x, y: x*y, probs) for probs in probs_pool]
-    probs_entity = zip(probs_pool, path_pool)
-    probs_entity = sorted(probs_entity, key=lambda x:x[0], reverse=True)
-    probs_entity = zip(*probs_entity)
-    probs_entity = [list(a) for a in probs_entity]
-    probs_pool , path_pool = probs_entity[0], probs_entity[1]
-    entity_paths = entity_paths[0].to("cpu")
-    seed_entities = seed_entities.to("cpu")
-    true_path = [seed_entities.item()] + entity_paths.tolist()[:2]
-    calculate_metrics(path_pool, probs_pool, true_path)
+        probs_pool = [reduce(lambda x, y: x+y, probs) for probs in probs_pool]
+        probs_entity = zip(probs_pool, path_pool)
+        probs_entity = sorted(probs_entity, key=lambda x:x[0], reverse=True)
+        probs_entity = zip(*probs_entity)
+        probs_entity = [list(a) for a in probs_entity]
+        probs_pool , path_pool = probs_entity[0], probs_entity[1]
+        entity_paths = entity_paths[0].to("cpu")
+        seed_entities = seed_entities.to("cpu")
+        true_path = [seed_entities.item()] + entity_paths.tolist()[:2]
+        calculate_metrics(path_pool, probs_pool, true_path)
 
 
 def predict_paths(policy_file, ConvKGDatasetLoaderTest, opt, graph):
     print('Predicting paths...')
     pretrain_sd = torch.load(policy_file)
-    model = KGPathWalkerModel(opt).to(opt["device"])
+    model = Seq2SeqModel(opt).to(opt["device"])
     model_sd = model.state_dict()
     model_sd.update(pretrain_sd)
     model.load_state_dict(model_sd)
@@ -241,19 +239,7 @@ def predict_paths(policy_file, ConvKGDatasetLoaderTest, opt, graph):
             recall_relation[k] = 0
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--split_id', 
-                        type=str, 
-                        required=True,
-                        help='Path to the training dataset text file')
-    parser.add_argument('--data_directory', 
-                        type=str, 
-                        required=True,
-                        help='Dataset Directory')
-    args = parser.parse_args()
-    
-    data_directory = args.data_directory
-    split_id = args.split_id
+    data_directory = "../../datasets/dataset_baseline/"
     splits_directory = "../../datasets/splits/split_"+split_id+"/"
     opt_dataset_train = {"entity2entityId": data_directory+"entity2entityId.pkl", "relation2relationId": data_directory+"relation2relationId.pkl",
                     "entity_embeddings": data_directory+"entity_embeddings.pkl", "relation_embeddings": data_directory+"relation_embeddings.pkl",
@@ -266,12 +252,12 @@ if __name__ == '__main__':
     opt_model = {"n_entity": len(DialKG_dataset_train.entity2entityId)+1, "n_relation": len(DialKG_dataset_train.relation2relationId)+1,
                 "entity2entityId": opt_dataset_train["entity2entityId"], "entity_embedding_path": opt_dataset_train["entity_embeddings"],
                 "entity_embeddings": DialKG_dataset_train.entity_embeddings, "relation_embeddings": DialKG_dataset_train.relation_embeddings, "word_embeddings": DialKG_dataset_train.word_embeddings,
-                "hidden_dim":128, "word_dim": 300, "batch_size":1, "device": device, "lr": 1e-2, "lr_reduction_factor":0.1,
-                "epochs": 5, "n_hops": 3, "model_directory": "models/", "model_name": "DialKGWalker", "clip": 5}
+                "hidden_dim":128, "word_dim": 300, "batch_size":1, "device": device, "lr": 1e-2, "lr_reduction_factor":0.1, "n_layers":1,
+                "epochs": 20, "n_hops": 3, "model_directory": "models/", "model_name": "DialKGWalker", "clip": 5}
 
     ConvKGDatasetLoaderTrain = DataLoader(DialKG_dataset_train, batch_size=opt_model["batch_size"], shuffle=True, num_workers=0, collate_fn=dialkg_collate)
     graph = DialKG_dataset_train.graph
-    policy_file = opt_model["model_directory"] + "model_"+split_id+"_25"
+    policy_file = opt_model["model_directory"] + "seq2seq_"+split_id+"_5"
     # path_file = args.log_dir + '/policy_paths_epoch{}.pkl'.format(args.epochs)
 
     predict_paths(policy_file, ConvKGDatasetLoaderTrain, opt_model, graph)

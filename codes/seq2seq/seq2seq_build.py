@@ -12,15 +12,15 @@ from sklearn.metrics import roc_auc_score
 from parlai.utils.misc import round_sigfigs
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
-# from logger import Logger
+from logger import Logger
 from tqdm import tqdm
 from time import time
 
-from DialKgWalker_model import SelfAttentionLayer, ModalityAttentionLayer, SentenceEncoder, DialogueEncoder, KGPathWalker
+from seq2seq_model import SelfAttentionLayer, ModalityAttentionLayer, SentenceEncoder, DialogueEncoder, Seq2Seq
 
-class KGPathWalkerModel(nn.Module):
+class Seq2SeqModel(nn.Module):
     def __init__(self, opt):
-        super(KGPathWalkerModel, self).__init__()
+        super(Seq2SeqModel, self).__init__()
         self.n_entity = opt["n_entity"]
         self.n_relation = opt["n_relation"]
         self.batch_size = opt["batch_size"]
@@ -32,6 +32,7 @@ class KGPathWalkerModel(nn.Module):
         self.n_hops = opt["n_hops"]
         self.model_name = opt["model_name"]
         self.model_directory = opt["model_directory"]
+        self.n_layers = opt["n_layers"]
 
         self.entity_features = opt["entity_embeddings"].to(self.device)
         self.relation_features = opt["relation_embeddings"].to(self.device)
@@ -40,6 +41,7 @@ class KGPathWalkerModel(nn.Module):
         self.entity_features = nn.Embedding.from_pretrained(self.entity_features)
         self.relation_features = nn.Embedding.from_pretrained(self.relation_features)
         self.word_features = nn.Embedding.from_pretrained(self.word_features)
+        x = self.relation_features.weight
 
         self.word_embeddings = nn.Embedding(400001, 300)
         self.entity_embeddings = nn.Embedding(self.n_entity, 128)
@@ -49,13 +51,13 @@ class KGPathWalkerModel(nn.Module):
         self.entity_embeddings = self.entity_embeddings.to(self.device)
         self.relation_embeddings = self.relation_embeddings.to(self.device)
 
+        self.w_in = nn.Linear(2*self.hidden_dim, self.hidden_dim)
+        self.w_in = self.w_in.to(self.device)
+
         self.utterance_encoder = SentenceEncoder(opt).to(self.device)
         self.dialogue_encoder = DialogueEncoder(opt).to(self.device)
         self.modality_attention = ModalityAttentionLayer(opt).to(self.device)
-        self.walker = KGPathWalker(opt).to(self.device)
-
-        self.wf = nn.Linear(2*self.hidden_dim, self.hidden_dim)
-        self.wf = self.wf.to(self.device)
+        self.walker = Seq2Seq(opt).to(self.device)
 
         self.optimizer = torch.optim.Adagrad( filter(lambda p: p.requires_grad, self.parameters()), lr=self.lr, lr_decay=0, eps=1e-8)
     
@@ -80,8 +82,8 @@ class KGPathWalkerModel(nn.Module):
         return dialogue_padded, current_padded, dialogue_len, current_len, dialogue_mask, current_mask, entity_paths, relation_paths, seed_entities, true_entities, start_entities
 
     def generate_negative_samples(self, current_batch_size):
-        negative_entity_samples = (torch.Tensor(current_batch_size, 20).random_(0, self.n_entity-1)).long()
-        negative_relation_samples = (torch.Tensor(current_batch_size, 20).random_(0, self.n_relation-1)).long()
+        negative_entity_samples = (torch.Tensor(current_batch_size, 10).random_(0, self.n_entity-1)).long()
+        negative_relation_samples = (torch.Tensor(current_batch_size, 10).random_(0, self.n_relation-1)).long()
         
         negative_entity_samples = negative_entity_samples.to(self.device)
         negative_relation_samples = negative_relation_samples.to(self.device)
@@ -126,23 +128,23 @@ class KGPathWalkerModel(nn.Module):
         x_bar = self.modality_attention(entity_embeddings, current, dialogue)
         negative_entity_samples, negative_relation_samples = self.generate_negative_samples(current_batch_size)
 
-        h_t = torch.zeros(current_batch_size, self.hidden_dim).to(self.device)
-        c_t = torch.zeros(current_batch_size, self.hidden_dim).to(self.device)
-        x_f = self.wf(x_bar)
+        x_bar = x_bar.unsqueeze(0)
+        h_t = x_bar
+        inp = entity_embeddings
+        c_t = x_bar
 
         true_entities = self.entity_embeddings(true_entities)
         true_entity_path = self.entity_embeddings(entity_paths)
-        true_relation_path = self.relation_embeddings(relation_paths)
         negative_entity = self.entity_embeddings(negative_entity_samples)
-        negative_relation = self.relation_embeddings(negative_relation_samples)
 
-        loss = self.loss_calc(x_f, true_entities, negative_entity)
+        loss = 0
         for i in range(self.n_hops):
-            h_t, c_t, r_t = self.walker(x_bar, self.relation_embeddings.weight, h_t, c_t)
-            entity_loss = self.loss_calc(h_t, true_entity_path[:, i, :], negative_entity)
-            relation_loss = self.loss_calc(r_t, true_relation_path[:, i, :], negative_relation)
-
-            loss += entity_loss + relation_loss
+            inp = inp.unsqueeze(1)
+            out, h_t, c_t = self.walker(inp, h_t, c_t)
+            x_err = out.squeeze(1)
+            entity_loss = self.loss_calc(x_err, true_entity_path[:, i, :], negative_entity)
+            inp = true_entity_path[:, i, :]
+            loss += entity_loss
 
         if train:
             self.optimizer.zero_grad()
@@ -151,7 +153,7 @@ class KGPathWalkerModel(nn.Module):
         return loss.item()
             
     def train_model(self, trainDataLoader, devDataLoader):
-        # logger = Logger("logs/")
+        logger = Logger("logs/")
         for epoch in range(self.epochs):
             self.train()
             train_loss = 0
@@ -173,7 +175,7 @@ class KGPathWalkerModel(nn.Module):
             print("Epoch = %d, Train Loss = %f, Dev Loss = %f"%(epoch+1, train_loss, dev_loss))
             if (epoch+1)%5==0:
                 torch.save(self.state_dict(), self.model_directory+self.model_name+"_"+str(epoch+1))
-            # logger.scalar_summary("Train Loss", train_loss, epoch+1)
-            # logger.scalar_summary("Dev Loss", dev_loss, epoch+1)
+            logger.scalar_summary("Train Loss", train_loss, epoch+1)
+            logger.scalar_summary("Dev Loss", dev_loss, epoch+1)
 
 
