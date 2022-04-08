@@ -12,6 +12,7 @@ import pickle
 import glob
 from tqdm import tqdm
 from functools import reduce
+import argparse
 
 from torch import nn
 from torch.nn.utils.rnn import pad_sequence
@@ -198,7 +199,23 @@ def predict_paths(policy_file, ConvKGDatasetLoaderTest, opt):
                 recall_path[k] = 0
 
 if __name__ == '__main__':
-    data_directory = "../../datasets/dataset_attnio/"
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--split_id', 
+                        type=str, 
+                        required=True,
+                        help='Path to the training dataset text file')
+    parser.add_argument('--data_directory', 
+                        type=str, 
+                        required=True,
+                        help='Dataset Directory')
+    parser.add_argument('--model_path', 
+                        type=str, 
+                        required=True,
+                        help='Dataset Directory')
+
+    args = parser.parse_args()
+    split_id = args.split_id
+    data_directory = args.data_directory
     splits_directory = "../../datasets/splits/split_"+split_id+"/"
     opt_dataset_train = {"entity2entityId": data_directory+"entity2entityId.pkl", "relation2relationId": data_directory+"relation2relationId.pkl",
                     "entity_embeddings": data_directory+"entity_embeddings.pkl", "relation_embeddings": data_directory+"relation_embeddings.pkl",
@@ -215,8 +232,7 @@ if __name__ == '__main__':
 
     AttnIODatasetLoaderTrain = DataLoader(AttnIO_dataset_train, batch_size=opt_model["batch_size"], shuffle=True, num_workers=0, collate_fn=attnIO_collate)
 
-    policy_file = opt_model["model_directory"] + "model_"+split_id+"_20"
-    # path_file = args.log_dir + '/policy_paths_epoch{}.pkl'.format(args.epochs)
+    policy_file = args.model_path
 
     predict_paths(policy_file, AttnIODatasetLoaderTrain, opt_model)
 
