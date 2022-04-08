@@ -1,4 +1,4 @@
-The official implementation of the NLP4ConvAI 2022 Paper: 
+The official implementation of the NLP4ConvAI 2022 Paper: KG-CRuSE: Recurrent Walks over Knowledge Graph for Explainable Conversation Reasoning using Semantic Embeddings
 
 To train the KG-Cruse model, run
 python3 main.py --max_acts=100000 --split_id=\$split_id\$ --model_name=\$name of the model\$ --data_directory=\$directory of the dataset\$
