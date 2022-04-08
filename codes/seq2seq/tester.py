@@ -26,6 +26,7 @@ from torch.distributions import Categorical
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import dgl
+import argparse
 
 import threading
 from functools import reduce
@@ -239,7 +240,22 @@ def predict_paths(policy_file, ConvKGDatasetLoaderTest, opt, graph):
             recall_relation[k] = 0
 
 if __name__ == '__main__':
-    data_directory = "../../datasets/dataset_baseline/"
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--split_id', 
+                        type=str, 
+                        required=True,
+                        help='Path to the training dataset text file')
+    parser.add_argument('--data_directory', 
+                        type=str, 
+                        required=True,
+                        help='Dataset Directory')
+    parser.add_argument('--model_path', 
+                        type=str, 
+                        required=True,
+                        help='Dataset Directory')
+    args = parser.parse_args()
+    data_directory = args.data_directory
+    split_id = args.split_id
     splits_directory = "../../datasets/splits/split_"+split_id+"/"
     opt_dataset_train = {"entity2entityId": data_directory+"entity2entityId.pkl", "relation2relationId": data_directory+"relation2relationId.pkl",
                     "entity_embeddings": data_directory+"entity_embeddings.pkl", "relation_embeddings": data_directory+"relation_embeddings.pkl",
@@ -257,7 +273,8 @@ if __name__ == '__main__':
 
     ConvKGDatasetLoaderTrain = DataLoader(DialKG_dataset_train, batch_size=opt_model["batch_size"], shuffle=True, num_workers=0, collate_fn=dialkg_collate)
     graph = DialKG_dataset_train.graph
-    policy_file = opt_model["model_directory"] + "seq2seq_"+split_id+"_5"
+    policy_file = args.model_path
+    # policy_file = opt_model["model_directory"] + "seq2seq_"+split_id+"_5"
     # path_file = args.log_dir + '/policy_paths_epoch{}.pkl'.format(args.epochs)
 
     predict_paths(policy_file, ConvKGDatasetLoaderTrain, opt_model, graph)
