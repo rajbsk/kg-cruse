@@ -229,13 +229,13 @@ class AttnIO(nn.Module):
         graph = dgl.remove_self_loop(graph)
         rels = graph.edata["edge_type"]
         feat_rel = feat_rels[rels].unsqueeze(1)
-        inflow_t_2 = self.inflow_layer_2(graph, feat, feat_rel, dialogue_context)
+        inflow_t_2 = self.inflow_layer_1(graph, feat, feat_rel, dialogue_context)
         inflow_t_2 = inflow_t_2.unsqueeze(1)
 
         graph.add_edges(graph.nodes(), graph.nodes(), data={"edge_type": torch.ones(graph.num_nodes(), dtype=torch.int64).to(self.device)*(self.self_loop_id)})
         rels = graph.edata["edge_type"]
         feat_rel = feat_rels[rels].unsqueeze(1)
-        outflow_t_2 = self.outflow_layer_2(graph, inflow_t_2, feat_rel)
+        outflow_t_2 = self.outflow_layer_1(graph, inflow_t_2, feat_rel)
 
         graph.edata.update({"transition_probs_2": outflow_t_2})
         graph.update_all(fn.u_mul_e("a_1", "transition_probs_2", "time_2"), fn.sum("time_2", "a_2"))
