@@ -250,6 +250,10 @@ if __name__ == '__main__':
                         type=str, 
                         required=True,
                         help='Dataset Directory')
+    parser.add_argument('--model_path', 
+                        type=str, 
+                        required=True,
+                        help='Dataset Directory')
     args = parser.parse_args()
     
     data_directory = args.data_directory
@@ -271,7 +275,8 @@ if __name__ == '__main__':
 
     ConvKGDatasetLoaderTrain = DataLoader(DialKG_dataset_train, batch_size=opt_model["batch_size"], shuffle=True, num_workers=0, collate_fn=dialkg_collate)
     graph = DialKG_dataset_train.graph
-    policy_file = opt_model["model_directory"] + "model_"+split_id+"_25"
+    policy_file = args.model_path
+    # policy_file = opt_model["model_directory"] + "model_"+split_id+"_25"
     # path_file = args.log_dir + '/policy_paths_epoch{}.pkl'.format(args.epochs)
 
     predict_paths(policy_file, ConvKGDatasetLoaderTrain, opt_model, graph)
