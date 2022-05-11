@@ -319,7 +319,7 @@ if __name__ == '__main__':
                 "device": device, "entity_dim": 768, "relation_dim": 768, "dialogue_dim": 768, "model_directory": "models/", "model_name": "Pretrained_Reward_Agent",
                 "batch_size":1, "epochs": 200, "max_path_length": 3, "state_dim": 60, "num_heads": 4, "entropy_weight": 0.1, "gamma": 0.99, "lr": 1e-4,
                 "pretrained_actor_model": "Cloning_Model_actor_400", "clip":5, "alpha": 0.1, "test": True,
-                "pretrained_discriminator_model": "Cloning_Model_discriminator_100", "pretrained_critic_model": "Cloning_Model_critic_20", "max_acts": 500}
+                "pretrained_discriminator_model": "Cloning_Model_discriminator_100", "pretrained_critic_model": "Cloning_Model_critic_20", "max_acts": 100000}
 
     ConvKGDatasetLoaderTrain = DataLoader(ConvKG_dataset_train, batch_size=opt_model["batch_size"], shuffle=False, num_workers=0, collate_fn=ConvKG_collate)
     

@@ -4,6 +4,9 @@ import os
 import argparse
 os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
 
+from dataset import DialKGDataset, ToTensor, dialkg_collate
+from seq2seq_build import Seq2SeqModel
+
 import torch
 print(torch.cuda.is_available())
 # torch.manual_seed(444)
@@ -19,8 +22,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from tensorboardX import SummaryWriter
 
-from dataset import DialKGDataset, ToTensor, dialkg_collate
-from seq2seq_build import Seq2SeqModel
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = "cpu"

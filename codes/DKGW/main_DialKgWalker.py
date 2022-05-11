@@ -1,9 +1,13 @@
 from __future__ import print_function, division
-import sys
 import os
+# os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+
+import sys
 split_id = sys.argv[1]
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
+
+from dataset import DialKGDataset, ToTensor, dialkg_collate
+from DialKGWalker_build import KGPathWalkerModel
 
 import torch
 
@@ -20,8 +24,7 @@ from torchvision import transforms
 from tensorboardX import SummaryWriter
 import argparse
 
-from dataset import DialKGDataset, ToTensor, dialkg_collate
-from DialKGWalker_build import KGPathWalkerModel
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = "cpu"

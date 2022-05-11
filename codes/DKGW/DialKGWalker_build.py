@@ -115,9 +115,9 @@ class KGPathWalkerModel(nn.Module):
 
         dialogue_packed = []
         for i in range(len(dialogue_embed)):
-            d_packed = pack_padded_sequence(dialogue_embed[i], dialogue_len[i], batch_first=True, enforce_sorted=False)
+            d_packed = pack_padded_sequence(dialogue_embed[i], dialogue_len[i].to("cpu"), batch_first=True, enforce_sorted=False)
             dialogue_packed.append(d_packed)
-        current = pack_padded_sequence(current, current_len, batch_first=True, enforce_sorted=False)
+        current = pack_padded_sequence(current, current_len.to("cpu"), batch_first=True, enforce_sorted=False)
 
         current = self.utterance_encoder(current, current_mask)
         dialogue = self.dialogue_encoder(dialogue_packed, dialogue_mask)

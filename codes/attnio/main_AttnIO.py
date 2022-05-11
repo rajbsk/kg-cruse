@@ -5,6 +5,9 @@ split_id = sys.argv[1]
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
 
+from dataset import AttnIODataset, ToTensor, attnIO_collate
+from AttnIO_build import AttnIOModel
+
 import torch
 from skimage import io, transform
 import numpy as np
@@ -19,8 +22,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from tensorboardX import SummaryWriter
 
-from dataset import AttnIODataset, ToTensor, attnIO_collate
-from AttnIO_build import AttnIOModel
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
