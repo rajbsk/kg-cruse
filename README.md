@@ -18,4 +18,4 @@ When running the codes, \$split_id\$ can take one of 1, 2, 3, 4 or 5.
 ## Citation
 Please cite our paper if you find our code and paper helpful.
 
-
+Copyright 2022 National University of Ireland Galway. This work was funded by the Irish Research Council under grant GOIPG/2019/3480: Chatbots in action: Towards the development of scalable domain specific chatbots
