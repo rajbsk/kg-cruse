@@ -17,6 +17,8 @@ The codes for KG-CRuSE and the baseline methods are present in the codes folder.
 When running the codes, \$split_id\$ can take one of 1, 2, 3, 4 or 5.
 ## Citation
 Please cite our paper if you find our code and paper helpful.
+
+```
 @inproceedings{sarkar2022kg,
   title={Kg-cruse: Recurrent walks over knowledge graph for explainable conversation reasoning using semantic embeddings},
   author={Sarkar, Rajdeep and Arcan, Mihael and McCrae, John Philip},
@@ -24,3 +26,4 @@ Please cite our paper if you find our code and paper helpful.
   pages={98--107},
   year={2022}
 }
+```
