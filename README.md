@@ -17,5 +17,10 @@ The codes for KG-CRuSE and the baseline methods are present in the codes folder.
 When running the codes, \$split_id\$ can take one of 1, 2, 3, 4 or 5.
 ## Citation
 Please cite our paper if you find our code and paper helpful.
-
-Copyright 2022 National University of Ireland Galway. This work was funded by the Irish Research Council under grant GOIPG/2019/3480: Chatbots in action: Towards the development of scalable domain specific chatbots
+@inproceedings{sarkar2022kg,
+  title={Kg-cruse: Recurrent walks over knowledge graph for explainable conversation reasoning using semantic embeddings},
+  author={Sarkar, Rajdeep and Arcan, Mihael and McCrae, John Philip},
+  booktitle={Proceedings of the 4th Workshop on NLP for Conversational AI},
+  pages={98--107},
+  year={2022}
+}
